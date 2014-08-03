@@ -5,7 +5,12 @@
 {-# LANGUAGE MultiWayIf        #-}
 {-# LANGUAGE OverloadedStrings #-}
 
-module Data.Redis.Resp (RespData (..), decode, encode) where
+module Data.Redis.Resp
+    ( Resp (..)
+    , resp
+    , decode
+    , encode
+    ) where
 
 import Control.Applicative
 import Control.Monad (replicateM, void)
@@ -18,73 +23,69 @@ import Data.Monoid
 import Data.Sequence (Seq)
 import Data.Text (Text)
 import Data.Text.Encoding (decodeUtf8, encodeUtf8)
-import Prelude hiding (foldr, take, concatMap)
+import Prelude hiding (foldr, take)
 
 import qualified Data.ByteString      as B
 import qualified Data.ByteString.Lazy as Lazy
 import qualified Data.Sequence        as Seq
 
-data RespData
-    = RespStr   !Text
-    | RespErr   !Text
-    | RespInt   !Int64
-    | RespBulk  ByteString
-    | RespArray (Seq RespData)
-    | RespNull  Null
+data Resp
+    = Str   !Text
+    | Err   !Text
+    | Int   !Int64
+    | Bulk  !ByteString
+    | Array (Seq Resp)
+    | NullArray
+    | NullBulk
     deriving (Eq, Ord, Show)
 
-data Null
-    = A -- ^ null array
-    | B -- ^ null bulk string
-    deriving (Eq, Ord, Show)
+decode :: ByteString -> Either String Resp
+decode = parseOnly resp
 
-decode :: ByteString -> Either String RespData
-decode = parseOnly single
-
-encode :: RespData -> Lazy.ByteString
+encode :: Resp -> Lazy.ByteString
 encode d = toLazyByteString (go d)
   where
-    go (RespStr   x) = char8 '+' <> byteString (encodeUtf8 x) <> crlf'
-    go (RespErr   x) = char8 '-' <> byteString (encodeUtf8 x) <> crlf'
-    go (RespInt   x) = char8 ':' <> int64Dec x <> crlf'
-    go (RespNull  A) = nullArray
-    go (RespNull  B) = nullBulk
-    go (RespBulk  x) = char8 '$'
+    go (Str   x) = char8 '+' <> byteString (encodeUtf8 x) <> crlf'
+    go (Err   x) = char8 '-' <> byteString (encodeUtf8 x) <> crlf'
+    go (Int   x) = char8 ':' <> int64Dec x <> crlf'
+    go (Bulk  x) = char8 '$'
         <> intDec (B.length x)
         <> crlf'
         <> byteString x
         <> crlf'
-    go (RespArray x) = char8 '*'
+    go (Array x) = char8 '*'
         <> intDec (Seq.length x)
         <> crlf'
         <> foldr (<>) mempty (fmap go x)
+    go NullArray = nullArray
+    go NullBulk  = nullBulk
 
 -----------------------------------------------------------------------------
 -- Parsing
 
-single :: Parser RespData
-single = do
+resp :: Parser Resp
+resp = do
     t <- anyChar
     case t of
-        '+' -> RespStr `fmap` text         <* crlf
-        '-' -> RespErr `fmap` text         <* crlf
-        ':' -> RespInt <$> signed decimal  <* crlf
-        '$' -> bulk                        <* crlf
+        '+' -> Str `fmap` text         <* crlf
+        '-' -> Err `fmap` text         <* crlf
+        ':' -> Int <$> signed decimal  <* crlf
+        '$' -> bulk
         '*' -> array
         _   -> fail $ "invalid type tag: " ++ show t
 
-bulk :: Parser RespData
+bulk :: Parser Resp
 bulk = do
     n <- signed decimal <* crlf
-    if | n >=  0   -> RespBulk <$> take n
-       | n == -1   -> return (RespNull B)
+    if | n >=  0   -> Bulk <$> take n <* crlf
+       | n == -1   -> return NullBulk
        | otherwise -> fail "negative bulk length"
 
-array :: Parser RespData
+array :: Parser Resp
 array = do
     n <- signed decimal <* crlf :: Parser Int
-    if | n >=  0   -> RespArray . Seq.fromList <$> replicateM n single
-       | n == -1   -> return (RespNull A)
+    if | n >=  0   -> Array . Seq.fromList <$> replicateM n resp
+       | n == -1   -> return NullArray
        | otherwise -> fail "negative array length"
 
 text :: Parser Text
