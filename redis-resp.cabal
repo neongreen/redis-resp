@@ -29,6 +29,7 @@ library
 
     exposed-modules:
         Data.Redis.Resp
+        Data.Redis.Command
 
     build-depends:
         attoparsec >= 0.11  && < 0.13
