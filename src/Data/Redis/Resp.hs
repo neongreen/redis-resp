@@ -21,17 +21,15 @@ import Data.Foldable
 import Data.Int
 import Data.Monoid
 import Data.Sequence (Seq)
-import Data.Text (Text)
-import Data.Text.Encoding (decodeUtf8, encodeUtf8)
-import Prelude hiding (foldr, take)
+import Prelude hiding (foldr, take, takeWhile)
 
 import qualified Data.ByteString      as B
 import qualified Data.ByteString.Lazy as Lazy
 import qualified Data.Sequence        as Seq
 
 data Resp
-    = Str   !Text
-    | Err   !Text
+    = Str   !ByteString
+    | Err   !ByteString
     | Int   !Int64
     | Bulk  !ByteString
     | Array (Seq Resp)
@@ -45,8 +43,8 @@ decode = parseOnly resp
 encode :: Resp -> Lazy.ByteString
 encode d = toLazyByteString (go d)
   where
-    go (Str   x) = char8 '+' <> byteString (encodeUtf8 x) <> crlf'
-    go (Err   x) = char8 '-' <> byteString (encodeUtf8 x) <> crlf'
+    go (Str   x) = char8 '+' <> byteString x <> crlf'
+    go (Err   x) = char8 '-' <> byteString x <> crlf'
     go (Int   x) = char8 ':' <> int64Dec x <> crlf'
     go (Bulk  x) = char8 '$'
         <> intDec (B.length x)
@@ -67,8 +65,8 @@ resp :: Parser Resp
 resp = do
     t <- anyChar
     case t of
-        '+' -> Str `fmap` text         <* crlf
-        '-' -> Err `fmap` text         <* crlf
+        '+' -> Str `fmap` bytes        <* crlf
+        '-' -> Err `fmap` bytes        <* crlf
         ':' -> Int <$> signed decimal  <* crlf
         '$' -> bulk
         '*' -> array
@@ -88,8 +86,8 @@ array = do
        | n == -1   -> return NullArray
        | otherwise -> fail "negative array length"
 
-text :: Parser Text
-text = decodeUtf8 <$> takeWhile1 (/= '\r')
+bytes :: Parser ByteString
+bytes = takeWhile (/= '\r')
 
 crlf :: Parser ()
 crlf = void $ string "\r\n"
