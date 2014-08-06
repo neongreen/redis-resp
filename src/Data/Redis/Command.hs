@@ -7,6 +7,7 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE KindSignatures             #-}
 {-# LANGUAGE OverloadedStrings          #-}
+{-# LANGUAGE StandaloneDeriving         #-}
 
 module Data.Redis.Command
     ( RunCommand (..)
@@ -30,6 +31,9 @@ data Command a where
     Ping :: Resp -> Command ByteString
     Get  :: Resp -> Command (Maybe ByteString)
     Set  :: Resp -> Command Bool
+
+deriving instance Eq   (Command a)
+deriving instance Show (Command a)
 
 newtype Args (a :: Symbol) = Args { args :: Seq Resp }
     deriving Monoid
