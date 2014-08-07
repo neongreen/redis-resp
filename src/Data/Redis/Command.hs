@@ -3,68 +3,73 @@
 -- file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
 {-# LANGUAGE DataKinds                  #-}
-{-# LANGUAGE GADTs                      #-}
+{-# LANGUAGE DeriveFunctor              #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE KindSignatures             #-}
 {-# LANGUAGE OverloadedStrings          #-}
-{-# LANGUAGE StandaloneDeriving         #-}
 
 module Data.Redis.Command
-    ( RunCommand (..)
-    , Command    (..)
-    , Args
+    ( Command (..)
+    , Opts
     , Key
     , ping
     , get
     , set, ex, px, nx, xx
     ) where
 
+import Control.Monad.Free
 import Data.ByteString (ByteString)
+import Data.DList
 import Data.Int
+import Data.IORef
 import Data.Monoid
 import Data.Redis.Resp
 import Data.String
-import Data.Sequence (Seq, singleton, fromList, (|>))
 import GHC.TypeLits
 
-data Command a where
-    Ping :: Resp -> Command ByteString
-    Get  :: Resp -> Command (Maybe ByteString)
-    Set  :: Resp -> Command Bool
+-- | Redis commands
+data Command k
+    = Ping !Resp (IORef Resp -> k)
+    | Get  !Resp (IORef Resp -> k)
+    | Set  !Resp (IORef Resp -> k)
+    deriving Functor
 
-deriving instance Eq   (Command a)
-deriving instance Show (Command a)
-
-newtype Args (a :: Symbol) = Args { args :: Seq Resp }
-    deriving Monoid
-
-newtype Key = Key ByteString
-    deriving (Eq, Ord, Show)
+-- | Redis key type
+newtype Key = Key { key :: ByteString } deriving (Eq, Ord, Show)
 
 instance IsString Key where
     fromString = Key . fromString
 
-class RunCommand m where
-    runCommand :: Command a -> m a
+-- | Command options
+data Opts (a :: Symbol) = Opts { len :: !Int, opts :: DList Resp }
 
-ping :: RunCommand m => m ByteString
-ping = runCommand . Ping . Array $ fromList [ Bulk "PING" ]
+instance Monoid (Opts a) where
+    mempty = Opts 0 empty
+    Opts x a `mappend` Opts y b = Opts (x + y) (a `append` b)
 
-get :: RunCommand m => Key -> m (Maybe ByteString)
-get (Key k) = runCommand . Get . Array $ fromList [ Bulk "GET", Bulk k ]
+ping :: Free Command (IORef Resp)
+ping = liftF $ Ping (Array 1 [Bulk "PING"]) id
 
-set :: RunCommand m => Key -> ByteString -> Args "SET" -> m Bool
-set (Key k) v a = runCommand . Set . Array $ fromList
-    [ Bulk "SET", Bulk k, Bulk v ] <> args a
+get :: Key -> Free Command (IORef Resp)
+get k = liftF $ Get (Array 2 [Bulk "GET", Bulk (key k)]) id
 
-ex :: Int64 -> Args "SET"
-ex i = Args $ singleton (Bulk "EX") |> Int i
+set :: Key -> ByteString -> Opts "SET" -> Free Command (IORef Resp)
+set k v o = liftF $ Set arr id
+  where
+    arr = Array (3 + len o)
+        $ Bulk "SET"
+        : Bulk (key k)
+        : Bulk v
+        : toList (opts o)
 
-px :: Int64 -> Args "SET"
-px i = Args $ singleton (Bulk "PX") |> Int i
+ex :: Int64 -> Opts "SET"
+ex i = Opts 2 $ Bulk "EX" `cons` singleton (Int i)
 
-xx :: Args "SET"
-xx = Args $ singleton (Bulk "XX")
+px :: Int64 -> Opts "SET"
+px i = Opts 2 $ Bulk "PX" `cons` singleton (Int i)
 
-nx :: Args "SET"
-nx = Args $ singleton (Bulk "NX")
+xx :: Opts "SET"
+xx = Opts 1 $ singleton (Bulk "XX")
+
+nx :: Opts "SET"
+nx = Opts 1 $ singleton (Bulk "NX")

@@ -13,26 +13,23 @@ module Data.Redis.Resp
     ) where
 
 import Control.Applicative
-import Control.Monad (replicateM, void)
+import Control.Monad (replicateM)
 import Data.Attoparsec.ByteString.Char8 hiding (char8)
 import Data.ByteString (ByteString)
 import Data.ByteString.Builder
-import Data.Foldable
 import Data.Int
 import Data.Monoid
-import Data.Sequence (Seq)
-import Prelude hiding (foldr, take, takeWhile)
+import Prelude hiding (take, takeWhile)
 
 import qualified Data.ByteString      as B
 import qualified Data.ByteString.Lazy as Lazy
-import qualified Data.Sequence        as Seq
 
 data Resp
     = Str   !ByteString
     | Err   !ByteString
     | Int   !Int64
     | Bulk  !ByteString
-    | Array (Seq Resp)
+    | Array !Int [Resp]
     | NullArray
     | NullBulk
     deriving (Eq, Ord, Show)
@@ -51,10 +48,10 @@ encode d = toLazyByteString (go d)
         <> crlf'
         <> byteString x
         <> crlf'
-    go (Array x) = char8 '*'
-        <> intDec (Seq.length x)
+    go (Array n x) = char8 '*'
+        <> intDec n
         <> crlf'
-        <> foldr (<>) mempty (fmap go x)
+        <> foldr (<>) mempty (map go x)
     go NullArray = nullArray
     go NullBulk  = nullBulk
 
@@ -65,9 +62,9 @@ resp :: Parser Resp
 resp = do
     t <- anyChar
     case t of
-        '+' -> Str `fmap` bytes        <* crlf
-        '-' -> Err `fmap` bytes        <* crlf
-        ':' -> Int <$> signed decimal  <* crlf
+        '+' -> Str `fmap` bytes       <* crlf
+        '-' -> Err `fmap` bytes       <* crlf
+        ':' -> Int <$> signed decimal <* crlf
         '$' -> bulk
         '*' -> array
         _   -> fail $ "invalid type tag: " ++ show t
@@ -82,7 +79,7 @@ bulk = do
 array :: Parser Resp
 array = do
     n <- signed decimal <* crlf :: Parser Int
-    if | n >=  0   -> Array . Seq.fromList <$> replicateM n resp
+    if | n >=  0   -> Array n <$> replicateM n resp
        | n == -1   -> return NullArray
        | otherwise -> fail "negative array length"
 
@@ -90,7 +87,7 @@ bytes :: Parser ByteString
 bytes = takeWhile (/= '\r')
 
 crlf :: Parser ()
-crlf = void $ string "\r\n"
+crlf = string "\r\n" >> return ()
 
 -----------------------------------------------------------------------------
 -- Serialising
