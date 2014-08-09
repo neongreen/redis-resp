@@ -17,7 +17,6 @@ import Data.DList hiding (singleton)
 import Data.Int
 import Data.Monoid
 import Data.Redis.Resp
-import Data.Redis.Internal
 import Data.String
 import GHC.TypeLits
 
@@ -30,15 +29,14 @@ data Error
     | InvalidConversion !String
     deriving (Eq, Ord, Show)
 
-type Redis  = ProgramT Command
+type Redis e = ProgramT (Command e)
 type Result = Either Error
 
 -- | Redis commands
-data Command :: * -> * where
-    Ping  :: Resp -> Command (Lazy (Result Pong))
-    Get   :: FromByteString a => Resp -> Command (Lazy (Result a))
-    Set   :: Resp -> Command (Lazy (Result Bool))
-    Await :: Lazy (Result a) -> Command (Result a)
+data Command e r where
+    Ping :: Resp -> Command e (e (Result Pong))
+    Get  :: FromByteString a => Resp -> Command e (e (Result a))
+    Set  :: Resp -> Command e (e (Result Bool))
 
 data Pong = Pong deriving (Eq, Show)
 
@@ -55,17 +53,14 @@ instance Monoid (Opts a) where
     mempty = Opts 0 empty
     Opts x a `mappend` Opts y b = Opts (x + y) (a `append` b)
 
-await :: Monad m => Lazy (Result a) -> Redis m (Result a)
-await r = singleton $ Await r
-
-ping :: Monad m => Redis m (Lazy (Result Pong))
+ping :: Monad m => Redis e m (e (Result Pong))
 ping = singleton $ Ping (Array 1 [Bulk "PING"])
 
 fromPing :: Resp -> Result Pong
 fromPing (Str "PONG") = Right Pong
 fromPing _            = Left $ InvalidResponse "ping"
 
-get :: (Monad m, FromByteString a) => Key -> Redis m (Lazy (Result a))
+get :: (Monad m, FromByteString a) => Key -> Redis e m (e (Result a))
 get k = singleton $ Get (Array 2 [Bulk "GET", Bulk (key k)])
 
 fromGet :: FromByteString a => Resp -> Result a
@@ -73,7 +68,7 @@ fromGet (Str  s) = either (Left . InvalidConversion) Right $ runParser parser s
 fromGet (Bulk s) = either (Left . InvalidConversion) Right $ runParser parser s
 fromGet _        = Left $ InvalidResponse "get"
 
-set :: Monad m => Key -> ByteString -> Opts "SET" -> Redis m (Lazy (Result Bool))
+set :: Monad m => Key -> ByteString -> Opts "SET" -> Redis e m (e (Result Bool))
 set k v o = singleton $ Set $ Array (3 + len o)
     $ Bulk "SET"
     : Bulk (key k)

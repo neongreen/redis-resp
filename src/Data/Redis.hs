@@ -13,7 +13,6 @@ module Data.Redis
     , ping
     , get
     , set, ex, px, nx, xx
-    , await
 
     , Pong (..)
 
@@ -21,12 +20,7 @@ module Data.Redis
     , resp
     , decode
     , encode
-
-    , Lazy
-    , lazy
-    , force
     ) where
 
 import Data.Redis.Resp
 import Data.Redis.Command
-import Data.Redis.Internal
