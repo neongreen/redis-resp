@@ -4,35 +4,42 @@
 
 {-# LANGUAGE DataKinds                  #-}
 {-# LANGUAGE DeriveFunctor              #-}
+{-# LANGUAGE GADTs                      #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE KindSignatures             #-}
 {-# LANGUAGE OverloadedStrings          #-}
+{-# LANGUAGE StandaloneDeriving         #-}
 
-module Data.Redis.Command
-    ( Command (..)
-    , Opts
-    , Key
-    , ping
-    , get
-    , set, ex, px, nx, xx
-    ) where
+module Data.Redis.Command where
 
-import Control.Monad.Free
+import Control.Monad.IO.Class
+import Control.Monad.Trans.Free
 import Data.ByteString (ByteString)
 import Data.DList
 import Data.Int
-import Data.IORef
 import Data.Monoid
 import Data.Redis.Resp
+import Data.Redis.Internal
 import Data.String
 import GHC.TypeLits
 
+data Error
+    = Error           !ByteString
+    | WrongType
+    | InvalidResponse !ByteString
+    deriving (Eq, Ord, Show)
+
+type Result = Either Error
+
 -- | Redis commands
-data Command k
-    = Ping !Resp (IORef Resp -> k)
-    | Get  !Resp (IORef Resp -> k)
-    | Set  !Resp (IORef Resp -> k)
-    deriving Functor
+data Command k where
+    Ping :: !Resp -> (Lazy (Result Pong) -> k) -> Command k
+    Get  :: !Resp -> (Lazy (Result Resp) -> k) -> Command k
+    Set  :: !Resp -> (Lazy (Result Bool) -> k) -> Command k
+
+deriving instance Functor Command
+
+data Pong = Pong deriving (Eq, Show)
 
 -- | Redis key type
 newtype Key = Key { key :: ByteString } deriving (Eq, Ord, Show)
@@ -47,13 +54,23 @@ instance Monoid (Opts a) where
     mempty = Opts 0 empty
     Opts x a `mappend` Opts y b = Opts (x + y) (a `append` b)
 
-ping :: Free Command (IORef Resp)
+await :: MonadIO m => Lazy (Result a) -> FreeT Command m (Result a)
+await r = liftIO $ force r
+
+ping :: Monad m => FreeT Command m (Lazy (Result Pong))
 ping = liftF $ Ping (Array 1 [Bulk "PING"]) id
 
-get :: Key -> Free Command (IORef Resp)
+fromPing :: Resp -> Result Pong
+fromPing (Str "PONG") = Right Pong
+fromPing _            = Left $ InvalidResponse "ping"
+
+get :: Monad m => Key -> FreeT Command m (Lazy (Result Resp))
 get k = liftF $ Get (Array 2 [Bulk "GET", Bulk (key k)]) id
 
-set :: Key -> ByteString -> Opts "SET" -> Free Command (IORef Resp)
+fromGet :: Resp -> Result Resp
+fromGet = Right
+
+set :: Monad m => Key -> ByteString -> Opts "SET" -> FreeT Command m (Lazy (Result Bool))
 set k v o = liftF $ Set arr id
   where
     arr = Array (3 + len o)
@@ -61,6 +78,11 @@ set k v o = liftF $ Set arr id
         : Bulk (key k)
         : Bulk v
         : toList (opts o)
+
+fromSet :: Resp -> Result Bool
+fromSet (Str "OK") = Right True
+fromSet NullBulk   = Right False
+fromSet _          = Left $ InvalidResponse "set"
 
 ex :: Int64 -> Opts "SET"
 ex i = Opts 2 $ Bulk "EX" `cons` singleton (Int i)

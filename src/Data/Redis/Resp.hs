@@ -5,12 +5,7 @@
 {-# LANGUAGE MultiWayIf        #-}
 {-# LANGUAGE OverloadedStrings #-}
 
-module Data.Redis.Resp
-    ( Resp (..)
-    , resp
-    , decode
-    , encode
-    ) where
+module Data.Redis.Resp where
 
 import Control.Applicative
 import Control.Monad (replicateM)
