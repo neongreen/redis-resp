@@ -3,7 +3,8 @@
 -- file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
 module Data.Redis
-    ( Command (..)
+    ( Redis
+    , Command (..)
     , Error   (..)
     , Key
     , Result
@@ -13,6 +14,8 @@ module Data.Redis
     , get
     , set, ex, px, nx, xx
     , await
+
+    , Pong (..)
 
     , Resp (..)
     , resp

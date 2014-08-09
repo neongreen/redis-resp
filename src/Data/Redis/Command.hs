@@ -3,19 +3,17 @@
 -- file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
 {-# LANGUAGE DataKinds                  #-}
-{-# LANGUAGE DeriveFunctor              #-}
 {-# LANGUAGE GADTs                      #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE KindSignatures             #-}
 {-# LANGUAGE OverloadedStrings          #-}
-{-# LANGUAGE StandaloneDeriving         #-}
 
 module Data.Redis.Command where
 
-import Control.Monad.IO.Class
-import Control.Monad.Trans.Free
+import Control.Monad.Operational
 import Data.ByteString (ByteString)
-import Data.DList
+import Data.ByteString.From
+import Data.DList hiding (singleton)
 import Data.Int
 import Data.Monoid
 import Data.Redis.Resp
@@ -23,21 +21,24 @@ import Data.Redis.Internal
 import Data.String
 import GHC.TypeLits
 
+import qualified Data.DList as DL
+
 data Error
-    = Error           !ByteString
+    = Error             !ByteString
     | WrongType
-    | InvalidResponse !ByteString
+    | InvalidResponse   !String
+    | InvalidConversion !String
     deriving (Eq, Ord, Show)
 
+type Redis  = ProgramT Command
 type Result = Either Error
 
 -- | Redis commands
-data Command k where
-    Ping :: !Resp -> (Lazy (Result Pong) -> k) -> Command k
-    Get  :: !Resp -> (Lazy (Result Resp) -> k) -> Command k
-    Set  :: !Resp -> (Lazy (Result Bool) -> k) -> Command k
-
-deriving instance Functor Command
+data Command :: * -> * where
+    Ping  :: Resp -> Command (Lazy (Result Pong))
+    Get   :: FromByteString a => Resp -> Command (Lazy (Result a))
+    Set   :: Resp -> Command (Lazy (Result Bool))
+    Await :: Lazy (Result a) -> Command (Result a)
 
 data Pong = Pong deriving (Eq, Show)
 
@@ -54,30 +55,30 @@ instance Monoid (Opts a) where
     mempty = Opts 0 empty
     Opts x a `mappend` Opts y b = Opts (x + y) (a `append` b)
 
-await :: MonadIO m => Lazy (Result a) -> FreeT Command m (Result a)
-await r = liftIO $ force r
+await :: Monad m => Lazy (Result a) -> Redis m (Result a)
+await r = singleton $ Await r
 
-ping :: Monad m => FreeT Command m (Lazy (Result Pong))
-ping = liftF $ Ping (Array 1 [Bulk "PING"]) id
+ping :: Monad m => Redis m (Lazy (Result Pong))
+ping = singleton $ Ping (Array 1 [Bulk "PING"])
 
 fromPing :: Resp -> Result Pong
 fromPing (Str "PONG") = Right Pong
 fromPing _            = Left $ InvalidResponse "ping"
 
-get :: Monad m => Key -> FreeT Command m (Lazy (Result Resp))
-get k = liftF $ Get (Array 2 [Bulk "GET", Bulk (key k)]) id
+get :: (Monad m, FromByteString a) => Key -> Redis m (Lazy (Result a))
+get k = singleton $ Get (Array 2 [Bulk "GET", Bulk (key k)])
 
-fromGet :: Resp -> Result Resp
-fromGet = Right
+fromGet :: FromByteString a => Resp -> Result a
+fromGet (Str  s) = either (Left . InvalidConversion) Right $ runParser parser s
+fromGet (Bulk s) = either (Left . InvalidConversion) Right $ runParser parser s
+fromGet _        = Left $ InvalidResponse "get"
 
-set :: Monad m => Key -> ByteString -> Opts "SET" -> FreeT Command m (Lazy (Result Bool))
-set k v o = liftF $ Set arr id
-  where
-    arr = Array (3 + len o)
-        $ Bulk "SET"
-        : Bulk (key k)
-        : Bulk v
-        : toList (opts o)
+set :: Monad m => Key -> ByteString -> Opts "SET" -> Redis m (Lazy (Result Bool))
+set k v o = singleton $ Set $ Array (3 + len o)
+    $ Bulk "SET"
+    : Bulk (key k)
+    : Bulk v
+    : toList (opts o)
 
 fromSet :: Resp -> Result Bool
 fromSet (Str "OK") = Right True
@@ -85,13 +86,13 @@ fromSet NullBulk   = Right False
 fromSet _          = Left $ InvalidResponse "set"
 
 ex :: Int64 -> Opts "SET"
-ex i = Opts 2 $ Bulk "EX" `cons` singleton (Int i)
+ex i = Opts 2 $ Bulk "EX" `cons` DL.singleton (Int i)
 
 px :: Int64 -> Opts "SET"
-px i = Opts 2 $ Bulk "PX" `cons` singleton (Int i)
+px i = Opts 2 $ Bulk "PX" `cons` DL.singleton (Int i)
 
 xx :: Opts "SET"
-xx = Opts 1 $ singleton (Bulk "XX")
+xx = Opts 1 $ DL.singleton (Bulk "XX")
 
 nx :: Opts "SET"
-nx = Opts 1 $ singleton (Bulk "NX")
+nx = Opts 1 $ DL.singleton (Bulk "NX")
