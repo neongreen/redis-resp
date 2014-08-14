@@ -33,11 +33,14 @@ library
         Data.Redis.Command
 
     build-depends:
-        attoparsec      >= 0.11  && < 0.13
-      , base            >= 4.5   && < 5.0
-      , bytestring      >= 0.9   && < 0.11
-      , bytestring-from == 0.3.*
-      , containers      >= 0.5   && < 0.6
-      , dlist           == 0.7.*
-      , operational     == 0.2.*
-      , transformers    >= 0.3   && < 0.5
+        attoparsec        >= 0.11  && < 0.13
+      , base              >= 4.5   && < 5.0
+      , bytestring        >= 0.9   && < 0.11
+      , bytestring-from   == 0.3.*
+      , containers        >= 0.5   && < 0.6
+      , double-conversion == 0.2.*
+      , dlist             == 0.7.*
+      , operational       == 0.2.*
+      , semigroups        == 0.15.*
+      , split             == 0.2.*
+      , transformers      >= 0.3   && < 0.5

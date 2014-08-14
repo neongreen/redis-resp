@@ -3,19 +3,7 @@
 -- file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
 module Data.Redis
-    ( Redis
-    , Command (..)
-    , Error   (..)
-    , Key
-    , Result
-    , Opts
-
-    , ping
-    , get
-    , set, ex, px, nx, xx
-
-    , Pong (..)
-
+    ( module C
     , Resp (..)
     , resp
     , decode
@@ -23,4 +11,4 @@ module Data.Redis
     ) where
 
 import Data.Redis.Resp
-import Data.Redis.Command
+import Data.Redis.Command as C
