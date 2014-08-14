@@ -340,9 +340,9 @@ data Command e r where
     HScan        :: FromByteString a => Resp -> Command e (e (Result (Cursor, [a])))
 
     -- Lists
-    BLPop      :: FromByteString a => Resp -> Command e (e (Result (Maybe (Key, a))))
-    BRPop      :: FromByteString a => Resp -> Command e (e (Result (Maybe (Key, a))))
-    BRPopLPush :: FromByteString a => Resp -> Command e (e (Result (Maybe a)))
+    BLPop      :: FromByteString a => Int64 -> Resp -> Command e (e (Result (Maybe (Key, a))))
+    BRPop      :: FromByteString a => Int64 -> Resp -> Command e (e (Result (Maybe (Key, a))))
+    BRPopLPush :: FromByteString a => Int64 -> Resp -> Command e (e (Result (Maybe a)))
     LIndex     :: FromByteString a => Resp -> Command e (e (Result (Maybe a)))
     LInsert    :: Resp -> Command e (e (Result Int64))
     LLen       :: Resp -> Command e (e (Result Int64))
@@ -748,14 +748,14 @@ rpoplpush :: (Monad m, FromByteString a) => Key -> Key -> Redis e m (e (Result (
 rpoplpush a b = singleton $ RPopLPush $ cmd 3 ["RPOPLPUSH", key a, key b]
 
 brpoplpush :: (Monad m, FromByteString a) => Key -> Key -> Seconds -> Redis e m (e (Result (Maybe a)))
-brpoplpush a b (Seconds t) = singleton $ BRPopLPush $ cmd 4 ["BRPOPLPUSH", key a, key b, int2bytes t]
+brpoplpush a b (Seconds t) = singleton $ BRPopLPush t $ cmd 4 ["BRPOPLPUSH", key a, key b, int2bytes t]
 
 blpop :: (Monad m, FromByteString a) => NonEmpty Key -> Seconds -> Redis e m (e (Result (Maybe (Key, a))))
-blpop kk (Seconds t) = singleton $ BLPop $ cmd (2 + NE.length kk) $
+blpop kk (Seconds t) = singleton $ BLPop t $ cmd (2 + NE.length kk) $
     "BLPOP" : map key (toList kk) ++ [int2bytes t]
 
 brpop :: (Monad m, FromByteString a) => NonEmpty Key -> Seconds -> Redis e m (e (Result (Maybe (Key, a))))
-brpop kk (Seconds t) = singleton $ BRPop $ cmd (2 + NE.length kk) $
+brpop kk (Seconds t) = singleton $ BRPop t $ cmd (2 + NE.length kk) $
     "BRPOP" : map key (toList kk) ++ [int2bytes t]
 
 lrange :: (Monad m, FromByteString a) => Key -> Int64 -> Int64 -> Redis e m (e (Result [a]))
