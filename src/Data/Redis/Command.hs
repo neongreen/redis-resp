@@ -197,17 +197,18 @@ module Data.Redis.Command
 
     -- * Response Reading
     , readInt
+    , readInt'Null
     , readDbl
     , readBool
     , readTTL
+    , readBulk'Null
     , readBulk
-    , readBulk'
+    , readListOfMaybes
     , readList
-    , readList'
     , readScoreList
     , readFields
     , readKeyValue
-    , readBulkOrArray
+    , readBulk'Array
     , readScan
     , matchStr
     , readType
@@ -294,24 +295,24 @@ data Command e r where
     Scan      :: FromByteString a => Resp -> Command e (e (Result (Cursor, [a])))
 
     -- Strings
-    Set      :: Resp -> Command e (e (Result Bool))
+    Append   :: Resp -> Command e (e (Result Int64))
     Get      :: FromByteString a => Resp -> Command e (e (Result (Maybe a)))
     GetRange :: FromByteString a => Resp -> Command e (e (Result a))
     GetSet   :: FromByteString a => Resp -> Command e (e (Result (Maybe a)))
     MGet     :: FromByteString a => Resp -> Command e (e (Result [Maybe a]))
     MSet     :: Resp -> Command e (e (Result ()))
     MSetNx   :: Resp -> Command e (e (Result Bool))
+    Set      :: Resp -> Command e (e (Result Bool))
     SetRange :: Resp -> Command e (e (Result Int64))
     StrLen   :: Resp -> Command e (e (Result Int64))
-    Append   :: Resp -> Command e (e (Result Int64))
 
     -- Bits
-    BitCount :: Resp -> Command e (e (Result Int64))
     BitAnd   :: Resp -> Command e (e (Result Int64))
-    BitOr    :: Resp -> Command e (e (Result Int64))
-    BitXOr   :: Resp -> Command e (e (Result Int64))
+    BitCount :: Resp -> Command e (e (Result Int64))
     BitNot   :: Resp -> Command e (e (Result Int64))
+    BitOr    :: Resp -> Command e (e (Result Int64))
     BitPos   :: Resp -> Command e (e (Result Int64))
+    BitXOr   :: Resp -> Command e (e (Result Int64))
     GetBit   :: Resp -> Command e (e (Result Int64))
     SetBit   :: Resp -> Command e (e (Result Int64))
 
@@ -339,23 +340,23 @@ data Command e r where
     HScan        :: FromByteString a => Resp -> Command e (e (Result (Cursor, [a])))
 
     -- Lists
+    BLPop      :: FromByteString a => Resp -> Command e (e (Result (Maybe (Key, a))))
+    BRPop      :: FromByteString a => Resp -> Command e (e (Result (Maybe (Key, a))))
+    BRPopLPush :: FromByteString a => Resp -> Command e (e (Result (Maybe a)))
     LIndex     :: FromByteString a => Resp -> Command e (e (Result (Maybe a)))
     LInsert    :: Resp -> Command e (e (Result Int64))
     LLen       :: Resp -> Command e (e (Result Int64))
     LPop       :: FromByteString a => Resp -> Command e (e (Result (Maybe a)))
-    RPop       :: FromByteString a => Resp -> Command e (e (Result (Maybe a)))
-    RPopLPush  :: FromByteString a => Resp -> Command e (e (Result (Maybe a)))
-    BRPopLPush :: FromByteString a => Resp -> Command e (e (Result (Maybe a)))
     LPush      :: Resp -> Command e (e (Result Int64))
-    RPush      :: Resp -> Command e (e (Result Int64))
     LPushNx    :: Resp -> Command e (e (Result Int64))
-    RPushNx    :: Resp -> Command e (e (Result Int64))
     LRange     :: FromByteString a => Resp -> Command e (e (Result [a]))
     LRem       :: Resp -> Command e (e (Result Int64))
     LSet       :: Resp -> Command e (e (Result ()))
     LTrim      :: Resp -> Command e (e (Result ()))
-    BLPop      :: FromByteString a => Resp -> Command e (e (Result (Maybe (Key, a))))
-    BRPop      :: FromByteString a => Resp -> Command e (e (Result (Maybe (Key, a))))
+    RPop       :: FromByteString a => Resp -> Command e (e (Result (Maybe a)))
+    RPopLPush  :: FromByteString a => Resp -> Command e (e (Result (Maybe a)))
+    RPush      :: Resp -> Command e (e (Result Int64))
+    RPushNx    :: Resp -> Command e (e (Result Int64))
 
     -- Sets
     SAdd        :: Resp -> Command e (e (Result Int64))
@@ -363,9 +364,7 @@ data Command e r where
     SDiff       :: FromByteString a => Resp -> Command e (e (Result [a]))
     SDiffStore  :: Resp -> Command e (e (Result Int64))
     SInter      :: FromByteString a => Resp -> Command e (e (Result [a]))
-    SUnion      :: FromByteString a => Resp -> Command e (e (Result [a]))
     SInterStore :: Resp -> Command e (e (Result Int64))
-    SUnionStore :: Resp -> Command e (e (Result Int64))
     SIsMember   :: Resp -> Command e (e (Result Bool))
     SMembers    :: FromByteString a => Resp -> Command e (e (Result [a]))
     SMove       :: Resp -> Command e (e (Result Bool))
@@ -373,28 +372,30 @@ data Command e r where
     SRandMember :: FromByteString a => Choose -> Resp -> Command e (e (Result [a]))
     SRem        :: Resp -> Command e (e (Result Int64))
     SScan       :: FromByteString a => Resp -> Command e (e (Result (Cursor, [a])))
+    SUnion      :: FromByteString a => Resp -> Command e (e (Result [a]))
+    SUnionStore :: Resp -> Command e (e (Result Int64))
 
     -- Sorted Sets
     ZAdd             :: Resp -> Command e (e (Result Int64))
     ZCard            :: Resp -> Command e (e (Result Int64))
     ZCount           :: Resp -> Command e (e (Result Int64))
     ZIncrBy          :: Resp -> Command e (e (Result Double))
-    ZScore           :: Resp -> Command e (e (Result Double))
     ZInterStore      :: Resp -> Command e (e (Result Int64))
-    ZUnionStore      :: Resp -> Command e (e (Result Int64))
     ZLexCount        :: Resp -> Command e (e (Result Int64))
     ZRange           :: FromByteString a => Bool -> Resp -> Command e (e (Result (ScoreList a)))
     ZRangeByLex      :: FromByteString a => Resp -> Command e (e (Result [a]))
     ZRangeByScore    :: FromByteString a => Bool -> Resp -> Command e (e (Result (ScoreList a)))
     ZRank            :: Resp -> Command e (e (Result (Maybe Int64)))
-    ZRevRank         :: Resp -> Command e (e (Result (Maybe Int64)))
     ZRem             :: Resp -> Command e (e (Result Int64))
     ZRemRangeByLex   :: Resp -> Command e (e (Result Int64))
     ZRemRangeByRank  :: Resp -> Command e (e (Result Int64))
     ZRemRangeByScore :: Resp -> Command e (e (Result Int64))
     ZRevRange        :: FromByteString a => Bool -> Resp -> Command e (e (Result (ScoreList a)))
     ZRevRangeByScore :: FromByteString a => Bool -> Resp -> Command e (e (Result (ScoreList a)))
+    ZRevRank         :: Resp -> Command e (e (Result (Maybe Int64)))
     ZScan            :: FromByteString a => Resp -> Command e (e (Result (Cursor, [a])))
+    ZScore           :: Resp -> Command e (e (Result Double))
+    ZUnionStore      :: Resp -> Command e (e (Result Int64))
 
     -- HyperLogLog
     PfAdd   :: Resp -> Command e (e (Result Bool))
@@ -1021,6 +1022,11 @@ store k = Opts 2 $ "STORE" `cons` DL.singleton (key k)
 -----------------------------------------------------------------------------
 -- Responses
 
+readInt'Null :: String -> Resp -> Result (Maybe Int64)
+readInt'Null _ (Int i)  = Right $ Just i
+readInt'Null _ NullBulk = Right Nothing
+readInt'Null s _        = Left $ InvalidResponse s
+
 readInt :: String -> Resp -> Result Int64
 readInt _ (Int i) = Right i
 readInt s _       = Left $ InvalidResponse s
@@ -1043,27 +1049,27 @@ readBool s r = readInt s r >>= toBool
     toBool 1 = Right True
     toBool _ = Left $ InvalidResponse s
 
-readList :: FromByteString a => String -> Resp -> Result [Maybe a]
-readList n (Array _ r) = foldr f (Right []) r
+readListOfMaybes :: FromByteString a => String -> Resp -> Result [Maybe a]
+readListOfMaybes n (Array _ r) = foldr f (Right []) r
   where
     f _        x@(Left _)  = x
     f NullBulk (Right acc) = Right $ Nothing : acc
     f (Bulk s) (Right acc) = (:acc) . Just <$> readStr s
     f (Str  s) (Right acc) = (:acc) . Just <$> readStr s
     f _        _           = Left $ InvalidResponse n
-readList n _ = Left $ InvalidResponse n
+readListOfMaybes n _ = Left $ InvalidResponse n
 
-readList' :: FromByteString a => String -> Resp -> Result [a]
-readList' r (Array _ v) = foldr f (Right []) v
+readList :: FromByteString a => String -> Resp -> Result [a]
+readList r (Array _ v) = foldr f (Right []) v
   where
     f _        x@(Left _)  = x
     f (Bulk s) (Right acc) = (:acc) <$> readStr s
     f (Str  s) (Right acc) = (:acc) <$> readStr s
     f _        _           = Left $ InvalidResponse r
-readList' r _ = Left $ InvalidResponse r
+readList r _ = Left $ InvalidResponse r
 
 readScoreList :: FromByteString a => String -> Bool -> Resp -> Result (ScoreList a)
-readScoreList r False a           = ScoreList [] <$> readList' r a
+readScoreList r False a           = ScoreList [] <$> readList r a
 readScoreList r True  (Array _ v) = toScoreList . unzip <$> foldr f (Right []) (chunksOf 2 v)
   where
     f _                x@(Left _)  = x
@@ -1085,21 +1091,21 @@ readKeyValue _ NullArray                  = return Nothing
 readKeyValue _ (Array _ [Bulk k, Bulk v]) = Just . (Key k,) <$> readStr v
 readKeyValue r _                          = Left $ InvalidResponse r
 
-readBulk :: FromByteString a => String -> Resp -> Result (Maybe a)
-readBulk _ NullBulk = Right Nothing
-readBulk _ (Bulk s) = Just <$> readStr s
+readBulk'Null :: FromByteString a => String -> Resp -> Result (Maybe a)
+readBulk'Null _ NullBulk = Right Nothing
+readBulk'Null _ (Bulk s) = Just <$> readStr s
+readBulk'Null n _        = Left $ InvalidResponse n
+
+readBulk :: FromByteString a => String -> Resp -> Result a
+readBulk _ (Bulk s) = readStr s
 readBulk n _        = Left $ InvalidResponse n
 
-readBulk' :: FromByteString a => String -> Resp -> Result a
-readBulk' _ (Bulk s) = readStr s
-readBulk' n _        = Left $ InvalidResponse n
-
-readBulkOrArray :: FromByteString a => String -> Choose -> Resp -> Result [a]
-readBulkOrArray n One r = maybeToList <$> readBulk n r
-readBulkOrArray n _   r = readList' n r
+readBulk'Array :: FromByteString a => String -> Choose -> Resp -> Result [a]
+readBulk'Array n One r = maybeToList <$> readBulk'Null n r
+readBulk'Array n _   r = readList n r
 
 readScan :: FromByteString a => String -> Resp -> Result (Cursor, [a])
-readScan n (Array 2 (Bulk c:v:[])) = (Cursor c,) <$> readList' n v
+readScan n (Array 2 (Bulk c:v:[])) = (Cursor c,) <$> readList n v
 readScan n _ = Left $ InvalidResponse n
 
 matchStr :: String -> ByteString -> Resp -> Result ()
