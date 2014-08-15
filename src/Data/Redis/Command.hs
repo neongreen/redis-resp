@@ -138,7 +138,7 @@ module Data.Redis.Command
     , llen
     , lpop
     , lpush
-    , lpushnx
+    , lpushx
     , lrange
     , lrem
     , lset
@@ -146,7 +146,7 @@ module Data.Redis.Command
     , rpop
     , rpoplpush
     , rpush
-    , rpushnx
+    , rpushx
 
     -- ** Sets
     , sadd
@@ -202,7 +202,6 @@ module Data.Redis.Command
     -- * Response Reading
     , readInt
     , readInt'Null
-    , readDbl
     , readBool
     , readTTL
     , readBulk'Null
@@ -353,7 +352,7 @@ data Command e r where
     LLen       :: Resp -> Command e (e (Result Int64))
     LPop       :: FromByteString a => Resp -> Command e (e (Result (Maybe a)))
     LPush      :: Resp -> Command e (e (Result Int64))
-    LPushNx    :: Resp -> Command e (e (Result Int64))
+    LPushX     :: Resp -> Command e (e (Result Int64))
     LRange     :: FromByteString a => Resp -> Command e (e (Result [a]))
     LRem       :: Resp -> Command e (e (Result Int64))
     LSet       :: Resp -> Command e (e (Result ()))
@@ -361,7 +360,7 @@ data Command e r where
     RPop       :: FromByteString a => Resp -> Command e (e (Result (Maybe a)))
     RPopLPush  :: FromByteString a => Resp -> Command e (e (Result (Maybe a)))
     RPush      :: Resp -> Command e (e (Result Int64))
-    RPushNx    :: Resp -> Command e (e (Result Int64))
+    RPushX     :: Resp -> Command e (e (Result Int64))
 
     -- Sets
     SAdd        :: Resp -> Command e (e (Result Int64))
@@ -399,7 +398,7 @@ data Command e r where
     ZRevRangeByScore :: FromByteString a => Bool -> Resp -> Command e (e (Result (ScoreList a)))
     ZRevRank         :: Resp -> Command e (e (Result (Maybe Int64)))
     ZScan            :: FromByteString a => Resp -> Command e (e (Result (Cursor, [a])))
-    ZScore           :: Resp -> Command e (e (Result Double))
+    ZScore           :: Resp -> Command e (e (Result (Maybe Double)))
     ZUnionStore      :: Resp -> Command e (e (Result Int64))
 
     -- HyperLogLog
@@ -688,10 +687,10 @@ bitpos k b (BitStart s) (BitEnd e) =
     toBit False = "0"
 
 getbit :: Monad m => Key -> Int64 -> Redis e m (e (Result Int64))
-getbit k o = singleton $ GetBit $ cmd 2 ["GETBIT", key k, int2bytes o]
+getbit k o = singleton $ GetBit $ cmd 3 ["GETBIT", key k, int2bytes o]
 
 setbit :: Monad m => Key -> Int64 -> Bool -> Redis e m (e (Result Int64))
-setbit k o b = singleton $ SetBit $ cmd 3 ["SETBIT", key k, int2bytes o, toBit b]
+setbit k o b = singleton $ SetBit $ cmd 4 ["SETBIT", key k, int2bytes o, toBit b]
   where
     toBit True  = "1"
     toBit False = "0"
@@ -732,7 +731,7 @@ hdel :: Monad m => Key -> NonEmpty Field -> Redis e m (e (Result Int64))
 hdel h kk = singleton $ HDel $ cmd (2 + NE.length kk) $ "HDEL" : key h : toList kk
 
 hexists :: Monad m => Key -> Field -> Redis e m (e (Result Bool))
-hexists h k = singleton $ HExists $ cmd 3 ["EXISTS", key h, k]
+hexists h k = singleton $ HExists $ cmd 3 ["HEXISTS", key h, k]
 
 hkeys :: Monad m => Key -> Redis e m (e (Result [Field]))
 hkeys h = singleton $ HKeys $ cmd 2 ["HKEYS", key h]
@@ -787,11 +786,11 @@ ltrim k i j = singleton $ LTrim $ cmd 4 ["LTRIM", key k, int2bytes i, int2bytes 
 lrem :: Monad m => Key -> Int64 -> ByteString -> Redis e m (e (Result Int64))
 lrem k c v = singleton $ LRem $ cmd 4 ["LREM", key k, int2bytes c, v]
 
-lpushnx :: Monad m => Key -> ByteString -> Redis e m (e (Result Int64))
-lpushnx k v = singleton $ LPushNx $ cmd 3 ["LPUSHNX", key k, v]
+lpushx :: Monad m => Key -> ByteString -> Redis e m (e (Result Int64))
+lpushx k v = singleton $ LPushX $ cmd 3 ["LPUSHX", key k, v]
 
-rpushnx :: Monad m => Key -> ByteString -> Redis e m (e (Result Int64))
-rpushnx k v = singleton $ RPushNx $ cmd 3 ["RPUSHNX", key k, v]
+rpushx :: Monad m => Key -> ByteString -> Redis e m (e (Result Int64))
+rpushx k v = singleton $ RPushX $ cmd 3 ["RPUSHX", key k, v]
 
 llen :: Monad m => Key -> Redis e m (e (Result Int64))
 llen k = singleton $ LLen $ cmd 2 ["LLEN", key k]
@@ -855,26 +854,26 @@ scard k = singleton $ SCard $ cmd 2 ["SCARD", key k]
 zrange :: (Monad m, FromByteString a) => Key -> Int64 -> Int64 -> Bool -> Redis e m (e (Result (ScoreList a)))
 zrange k a b s =
     let args = ["ZRANGE", key k, int2bytes a, int2bytes b, "WITHSCORES"]
-    in if s then singleton $ ZRange False $ cmd 4 (init args)
-            else singleton $ ZRange False $ cmd 5 args
+    in if s then singleton $ ZRange s $ cmd 5 args
+            else singleton $ ZRange s $ cmd 4 (init args)
 
 zrevrange :: (Monad m, FromByteString a) => Key -> Int64 -> Int64 -> Bool -> Redis e m (e (Result (ScoreList a)))
 zrevrange k a b s =
     let args = ["ZREVRANGE", key k, int2bytes a, int2bytes b, "WITHSCORES"]
-    in if s then singleton $ ZRevRange False $ cmd 4 (init args)
-            else singleton $ ZRevRange False $ cmd 5 args
+    in if s then singleton $ ZRevRange s $ cmd 5 args
+            else singleton $ ZRevRange s $ cmd 4 (init args)
 
 zrangebyscore :: (Monad m, FromByteString a) => Key -> Double -> Double -> Bool -> Opts "LIMIT" -> Redis e m (e (Result (ScoreList a)))
 zrangebyscore k a b s o =
     let args = ["ZRANGEBYSCORE", key k, dbl2bytes a, dbl2bytes b, "WITHSCORES"] in
-    if s then singleton $ ZRangeByScore False $ cmd (4 + len o) $ init args ++ toList (opts o)
-         else singleton $ ZRangeByScore True  $ cmd (5 + len o) $ args ++ toList (opts o)
+    if s then singleton $ ZRangeByScore s $ cmd (5 + len o) $ args ++ toList (opts o)
+         else singleton $ ZRangeByScore s $ cmd (4 + len o) $ init args ++ toList (opts o)
 
 zrevrangebyscore :: (Monad m, FromByteString a) => Key -> Double -> Double -> Bool -> Opts "LIMIT" -> Redis e m (e (Result (ScoreList a)))
 zrevrangebyscore k a b s o =
     let args = ["ZREVRANGEBYSCORE", key k, dbl2bytes a, dbl2bytes b, "WITHSCORES"] in
-    if s then singleton $ ZRevRangeByScore False $ cmd (4 + len o) $ init args ++ toList (opts o)
-         else singleton $ ZRevRangeByScore True  $ cmd (5 + len o) $ args ++ toList (opts o)
+    if s then singleton $ ZRevRangeByScore s $ cmd (5 + len o) $ args ++ toList (opts o)
+         else singleton $ ZRevRangeByScore s $ cmd (4 + len o) $ init args ++ toList (opts o)
 
 zadd :: Monad m => Key -> NonEmpty (Double, ByteString) -> Redis e m (e (Result Int64))
 zadd k v = singleton $ ZAdd $ cmd (2 + 2 * NE.length v) $ "ZADD" : key k : foldr f [] v
@@ -950,7 +949,7 @@ zrem k vv = singleton $ ZRem $ cmd (2 + NE.length vv) $ "ZREM" : key k : toList 
 zincrby :: Monad m => Key -> Double -> ByteString -> Redis e m (e (Result Double))
 zincrby k i v = singleton $ ZIncrBy $ cmd 4 ["ZINCRBY", key k, dbl2bytes i, v]
 
-zscore :: Monad m => Key -> ByteString -> Redis e m (e (Result Double))
+zscore :: Monad m => Key -> ByteString -> Redis e m (e (Result (Maybe Double)))
 zscore k v = singleton $ ZScore $ cmd 3 ["ZSCORE", key k, v]
 
 zcard :: Monad m => Key -> Redis e m (e (Result Int64))
@@ -1038,10 +1037,6 @@ readInt'Null s _        = Left $ InvalidResponse s
 readInt :: String -> Resp -> Result Int64
 readInt _ (Int i) = Right i
 readInt s _       = Left $ InvalidResponse s
-
-readDbl :: String -> Resp -> Result Double
-readDbl _ (Bulk d) = readStr d
-readDbl s _        = Left $ InvalidResponse s
 
 readTTL :: String -> Resp -> Result (Maybe TTL)
 readTTL s r = toTTL <$> readInt s r
