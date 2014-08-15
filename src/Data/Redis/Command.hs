@@ -34,6 +34,10 @@ module Data.Redis.Command
     , Cursor
     , zero
 
+    -- ** Non-empty lists
+    , NonEmpty (..)
+    , one
+
     -- ** Options
     , Opts
     , none
@@ -213,6 +217,7 @@ module Data.Redis.Command
     , matchStr
     , readType
     , fromSet
+    , anyStr
     ) where
 
 import Control.Applicative
@@ -480,6 +485,9 @@ start = BitStart . int2bytes
 end :: Int64 -> BitEnd
 end = BitEnd . int2bytes
 
+one :: a -> NonEmpty a
+one a = a :| []
+
 -----------------------------------------------------------------------------
 -- Connection
 
@@ -628,8 +636,8 @@ setrange k i a = singleton $ SetRange $ cmd 4 ["SETRANGE", key k, int2bytes i, a
 append :: Monad m => Key -> ByteString -> Redis e m (e (Result Int64))
 append k v = singleton $ Append $ cmd 3 ["APPEND", key k, v]
 
-strlen :: Monad m => Key -> ByteString -> Redis e m (e (Result Int64))
-strlen k v = singleton $ StrLen $ cmd 3 ["STRLEN", key k, v]
+strlen :: Monad m => Key -> Redis e m (e (Result Int64))
+strlen k = singleton $ StrLen $ cmd 2 ["STRLEN", key k]
 
 decr :: Monad m => Key -> Redis e m (e (Result Int64))
 decr k = singleton $ Decr $ cmd 2 ["DECR", key k]
@@ -1113,6 +1121,10 @@ matchStr n x (Str s)
     | x == s    = Right ()
     | otherwise = Left $ InvalidResponse n
 matchStr n _ _ = Left $ InvalidResponse n
+
+anyStr :: String -> Resp -> Result ()
+anyStr _ (Str _) = Right ()
+anyStr n _       = Left $ InvalidResponse n
 
 readType :: String -> Resp -> Result (Maybe RedisType)
 readType _ (Str s) = case s of
