@@ -245,10 +245,15 @@ import qualified Data.ByteString    as B
 import qualified Data.DList         as DL
 import qualified Data.List.NonEmpty as NE
 
+-- | Redis error type.
 data RedisError
-    = RedisError        !ByteString
-    | InvalidResponse   !String
+    = RedisError !ByteString
+        -- ^ General error case.
+    | InvalidResponse !String
+        -- ^ The received response is invalid or unexpected (e.g. a bulk
+        -- string instead of an integer).
     | InvalidConversion !String
+        -- ^ ByteString conversion using 'FromByteString' failed.
     deriving (Eq, Ord, Show, Typeable)
 
 instance Exception RedisError
@@ -256,7 +261,7 @@ instance Exception RedisError
 type Redis e = ProgramT (Command e)
 type Result = Either RedisError
 
--- | Redis commands
+-- | Redis commands.
 data Command e r where
     -- Connection
     Ping   :: Resp -> Command e (e (Result ()))
@@ -406,6 +411,7 @@ data Command e r where
     PfCount :: Resp -> Command e (e (Result Int64))
     PfMerge :: Resp -> Command e (e (Result ()))
 
+-- | The types redis reports via <http://redis.io/commands/type type>.
 data RedisType
     = RedisString
     | RedisList
