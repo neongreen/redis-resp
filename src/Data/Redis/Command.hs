@@ -13,22 +13,25 @@
 module Data.Redis.Command
     ( -- * Types
       Redis
-    , Command    (..)
+    , PubSub
+    , Command       (..)
+    , PubSubCommand (..)
+    , PushMessage   (..)
     , Result
-    , RedisError (..)
-    , RedisType  (..)
-    , TTL        (..)
-    , Side       (..)
-    , Choose     (..)
-    , Aggregate  (..)
-    , Min        (..)
-    , Max        (..)
-    , ScoreList  (..)
-    , Seconds    (..)
-    , Timestamp  (..)
+    , RedisError    (..)
+    , RedisType     (..)
+    , TTL           (..)
+    , Side          (..)
+    , Choose        (..)
+    , Aggregate     (..)
+    , Min           (..)
+    , Max           (..)
+    , ScoreList     (..)
+    , Seconds       (..)
+    , Timestamp     (..)
     , Field
     , Index
-    , Key        (..)
+    , Key           (..)
 
     -- ** Cursor
     , Cursor
@@ -199,6 +202,13 @@ module Data.Redis.Command
     -- ** Sort
     , sort, by, limit, getkey, asc, desc, alpha, store
 
+    -- ** Pub/Sub
+    , publish
+    , subscribe
+    , psubscribe
+    , unsubscribe
+    , punsubscribe
+
     -- * Response Reading
     , readInt
     , readInt'Null
@@ -217,6 +227,7 @@ module Data.Redis.Command
     , readType
     , fromSet
     , anyStr
+    , readPushMessage
     ) where
 
 import Control.Applicative
@@ -259,7 +270,8 @@ data RedisError
 instance Exception RedisError
 
 type Redis e = ProgramT (Command e)
-type Result = Either RedisError
+type PubSub  = ProgramT PubSubCommand
+type Result  = Either RedisError
 
 -- | Redis commands.
 data Command e r where
@@ -410,6 +422,36 @@ data Command e r where
     PfAdd   :: Resp -> Command e (e (Result Bool))
     PfCount :: Resp -> Command e (e (Result Int64))
     PfMerge :: Resp -> Command e (e (Result ()))
+
+    -- Pub/Sub
+    Publish :: Resp -> Command e (e (Result Int64))
+
+-- | Pub/Sub commands.
+data PubSubCommand r where
+    Subscribe    :: Resp -> PubSubCommand ()
+    Unsubscribe  :: Resp -> PubSubCommand ()
+    PSubscribe   :: Resp -> PubSubCommand ()
+    PUnsubscribe :: Resp -> PubSubCommand ()
+
+data PushMessage
+    = SubscribeMessage
+        { channel       :: !ByteString
+        , subscriptions :: !Int64
+        }
+    | UnsubscribeMessage
+        { channel       :: !ByteString
+        , subscriptions :: !Int64
+        }
+    | Message
+        { channel :: !ByteString
+        , message :: !ByteString
+        }
+    | PMessage
+        { pattern :: !ByteString
+        , channel :: !ByteString
+        , message :: !ByteString
+        }
+    deriving (Eq, Ord, Show)
 
 -- | The types redis reports via <http://redis.io/commands/type type>.
 data RedisType
@@ -1033,6 +1075,24 @@ store :: Key -> Opts "SORT"
 store k = Opts 2 $ "STORE" `cons` DL.singleton (key k)
 
 -----------------------------------------------------------------------------
+-- Pub/Sub
+
+publish :: Monad m => ByteString -> ByteString -> Redis e m (e (Result Int64))
+publish c m = singleton $ Publish $ cmd 3 $ ["PUBLISH", c, m]
+
+subscribe :: Monad m => NonEmpty ByteString -> PubSub m ()
+subscribe cs = singleton $ Subscribe $ cmd (1 + NE.length cs) $ "SUBSCRIBE" : toList cs
+
+psubscribe :: Monad m => NonEmpty ByteString -> PubSub m ()
+psubscribe cs = singleton $ PSubscribe $ cmd (1 + NE.length cs) $ "PSUBSCRIBE" : toList cs
+
+unsubscribe :: Monad m => [ByteString] -> PubSub m ()
+unsubscribe cs = singleton $ Unsubscribe $ cmd (1 + length cs) $ "UNSUBSCRIBE" : toList cs
+
+punsubscribe :: Monad m => [ByteString] -> PubSub m ()
+punsubscribe cs = singleton $ PUnsubscribe $ cmd (1 + length cs) $ "PUNSUBSCRIBE" : toList cs
+
+-----------------------------------------------------------------------------
 -- Responses
 
 readInt'Null :: String -> Resp -> Result (Maybe Int64)
@@ -1142,6 +1202,21 @@ fromSet :: Resp -> Result Bool
 fromSet (Str "OK") = Right True
 fromSet NullBulk   = Right False
 fromSet _          = Left $ InvalidResponse "SET"
+
+readPushMessage :: Resp -> Result PushMessage
+readPushMessage (Array 3 (Bulk "message":Bulk c:Bulk m:[])) =
+    Right $ Message c m
+readPushMessage (Array 4 (Bulk "pmessage":Bulk p:Bulk c:Bulk m:[])) =
+    Right $ PMessage p c m
+readPushMessage (Array 3 (Bulk "subscribe":Bulk c:Int n:[])) =
+    Right $ SubscribeMessage c n
+readPushMessage (Array 3 (Bulk "unsubscribe":Bulk c:Int n:[])) =
+    Right $ UnsubscribeMessage c n
+readPushMessage (Array 3 (Bulk "psubscribe":Bulk c:Int n:[])) =
+    Right $ SubscribeMessage c n
+readPushMessage (Array 3 (Bulk "punsubscribe":Bulk c:Int n:[])) =
+    Right $ UnsubscribeMessage c n
+readPushMessage _ = Left $ InvalidResponse "pub/sub"
 
 -----------------------------------------------------------------------------
 -- Helpers
