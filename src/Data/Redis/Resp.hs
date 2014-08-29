@@ -10,14 +10,14 @@ module Data.Redis.Resp where
 import Control.Applicative
 import Control.Monad (replicateM)
 import Data.Attoparsec.ByteString.Char8 hiding (char8)
-import Data.ByteString (ByteString)
+import Data.ByteString.Lazy (ByteString)
 import Data.ByteString.Builder
 import Data.Int
 import Data.Monoid
 import Prelude hiding (take, takeWhile)
 
-import qualified Data.ByteString      as B
-import qualified Data.ByteString.Lazy as Lazy
+import qualified Data.Attoparsec.ByteString.Lazy as P
+import qualified Data.ByteString.Lazy            as Lazy
 
 data Resp
     = Str   !ByteString
@@ -30,18 +30,18 @@ data Resp
     deriving (Eq, Ord, Show)
 
 decode :: ByteString -> Either String Resp
-decode = parseOnly resp
+decode = P.eitherResult . P.parse resp
 
 encode :: Resp -> Lazy.ByteString
 encode d = toLazyByteString (go d)
   where
-    go (Str   x) = char8 '+' <> byteString x <> crlf'
-    go (Err   x) = char8 '-' <> byteString x <> crlf'
+    go (Str   x) = char8 '+' <> lazyByteString x <> crlf'
+    go (Err   x) = char8 '-' <> lazyByteString x <> crlf'
     go (Int   x) = char8 ':' <> int64Dec x <> crlf'
     go (Bulk  x) = char8 '$'
-        <> intDec (B.length x)
+        <> int64Dec (Lazy.length x)
         <> crlf'
-        <> byteString x
+        <> lazyByteString x
         <> crlf'
     go (Array n x) = char8 '*'
         <> intDec n
@@ -67,7 +67,7 @@ resp = do
 bulk :: Parser Resp
 bulk = do
     n <- signed decimal <* crlf
-    if | n >=  0   -> Bulk <$> take n <* crlf
+    if | n >=  0   -> Bulk . Lazy.fromStrict <$> take n <* crlf
        | n == -1   -> return NullBulk
        | otherwise -> fail "negative bulk length"
 
@@ -79,7 +79,7 @@ array = do
        | otherwise -> fail "negative array length"
 
 bytes :: Parser ByteString
-bytes = takeWhile (/= '\r')
+bytes = Lazy.fromStrict <$> takeWhile (/= '\r')
 
 crlf :: Parser ()
 crlf = string "\r\n" >> return ()

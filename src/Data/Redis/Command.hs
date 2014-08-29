@@ -233,11 +233,10 @@ module Data.Redis.Command
 import Control.Applicative
 import Control.Exception (Exception)
 import Control.Monad.Operational
-import Data.ByteString (ByteString)
 import Data.ByteString.Builder (int64Dec)
 import Data.ByteString.Builder.Extra
-import Data.ByteString.From
-import Data.ByteString.Lazy (toStrict)
+import Data.ByteString.Conversion
+import Data.ByteString.Lazy (ByteString, fromStrict)
 import Data.DList (DList, cons)
 import Data.Double.Conversion.ByteString (toShortest)
 import Data.Foldable (toList, foldr)
@@ -252,9 +251,9 @@ import Data.Typeable
 import GHC.TypeLits
 import Prelude hiding (foldr, readList)
 
-import qualified Data.ByteString    as B
-import qualified Data.DList         as DL
-import qualified Data.List.NonEmpty as NE
+import qualified Data.ByteString.Lazy as Lazy
+import qualified Data.DList           as DL
+import qualified Data.List.NonEmpty   as NE
 
 -- | Redis error type.
 data RedisError
@@ -728,7 +727,7 @@ bitop o kk = cmd (2 + NE.length kk) $ "BITOP" : o : map key (toList kk)
 
 bitpos :: Monad m => Key -> Bool -> BitStart -> BitEnd -> Redis m Int64
 bitpos k b (BitStart s) (BitEnd e) =
-    let args = filter (not . B.null) [s, e] in
+    let args = filter (not . Lazy.null) [s, e] in
     singleton $ BitPos $ cmd (3 + length args) $ "BITPOS" : key k : toBit b : args
   where
     toBit True  = "1"
@@ -1226,11 +1225,11 @@ cmd n a = Array n (map Bulk a)
 {-# INLINE cmd #-}
 
 int2bytes :: Int64 -> ByteString
-int2bytes = toStrict . toLazyByteStringWith (safeStrategy 20 8) mempty . int64Dec
+int2bytes = toLazyByteStringWith (safeStrategy 20 8) mempty . int64Dec
 {-# INLINE int2bytes #-}
 
 dbl2bytes :: Double -> ByteString
-dbl2bytes = toShortest
+dbl2bytes = fromStrict . toShortest
 {-# INLINE dbl2bytes #-}
 
 side2bytes :: Side -> ByteString
@@ -1239,5 +1238,5 @@ side2bytes After  = "AFTER"
 {-# INLINE side2bytes #-}
 
 readStr :: FromByteString a => ByteString -> Result a
-readStr s = either (Left . InvalidConversion) Right $ runParser parser s
+readStr s = either (Left . InvalidConversion) Right $ runParser' parser s
 {-# INLINE readStr #-}
