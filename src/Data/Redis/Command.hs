@@ -540,8 +540,8 @@ one a = a :| []
 ping :: Monad m => Redis m ()
 ping = singleton $ Ping $ cmd 1 ["PING"]
 
-echo :: (Monad m, FromByteString a) => ByteString -> Redis m a
-echo x = singleton $ Echo $ cmd 2 ["ECHO", x]
+echo :: (Monad m, ToByteString a, FromByteString a) => a -> Redis m a
+echo x = singleton $ Echo $ cmd 2 ["ECHO", toByteString x]
 
 auth :: Monad m => ByteString -> Redis m ()
 auth x = singleton $ Auth $ cmd 2 ["AUTH", x]
@@ -642,8 +642,8 @@ typeof k = singleton $ Type $ cmd 2 ["TYPE", key k]
 get :: (Monad m, FromByteString a) => Key -> Redis m (Maybe a)
 get k = singleton $ Get $ cmd 2 ["GET", key k]
 
-set :: Monad m => Key -> ByteString -> Opts "SET" -> Redis m Bool
-set k v o = singleton $ Set $ cmd (3 + len o) $ "SET" : key k : v : toList (opts o)
+set :: (Monad m, ToByteString a) => Key -> a -> Opts "SET" -> Redis m Bool
+set k v o = singleton $ Set $ cmd (3 + len o) $ "SET" : key k : toByteString v : toList (opts o)
 
 ex :: Int64 -> Opts "SET"
 ex i = Opts 2 $ "EX" `cons` DL.singleton (int2bytes i)
@@ -657,30 +657,30 @@ xx = Opts 1 $ DL.singleton "XX"
 nx :: Opts "SET"
 nx = Opts 1 $ DL.singleton "NX"
 
-getset :: (Monad m, FromByteString a) => Key -> ByteString -> Redis m (Maybe a)
-getset k v = singleton $ GetSet $ cmd 3 ["GETSET", key k, v]
+getset :: (Monad m, ToByteString a, FromByteString b) => Key -> a -> Redis m (Maybe b)
+getset k v = singleton $ GetSet $ cmd 3 ["GETSET", key k, toByteString v]
 
 mget :: (Monad m, FromByteString a) => NonEmpty Key -> Redis m [Maybe a]
 mget kk = singleton $ MGet $ cmd (1 + NE.length kk) $ "MGET" : map key (toList kk)
 
-mset :: Monad m => NonEmpty (Key, ByteString) -> Redis m ()
+mset :: (Monad m, ToByteString a) => NonEmpty (Key, a) -> Redis m ()
 mset kv = singleton $ MSet $ cmd (1 + 2 * NE.length kv) $ "MSET" : foldr f [] kv
   where
-    f (k, v) acc = key k : v : acc
+    f (k, v) acc = key k : toByteString v : acc
 
-msetnx :: Monad m => NonEmpty (Key, ByteString) -> Redis m Bool
+msetnx :: (Monad m, ToByteString a) => NonEmpty (Key, a) -> Redis m Bool
 msetnx kv = singleton $ MSetNx $ cmd (1 + 2 * NE.length kv) $ "MSETNX" : foldr f [] kv
   where
-    f (k, v) acc = key k : v : acc
+    f (k, v) acc = key k : toByteString v : acc
 
 getrange :: (Monad m, FromByteString a) => Key -> Int64 -> Int64 -> Redis m a
 getrange k a b = singleton $ GetRange $ cmd 4 ["GETRANGE", key k, int2bytes a, int2bytes b]
 
-setrange :: Monad m => Key -> Int64 -> ByteString -> Redis m Int64
-setrange k i a = singleton $ SetRange $ cmd 4 ["SETRANGE", key k, int2bytes i, a]
+setrange :: (Monad m, ToByteString a) => Key -> Int64 -> a -> Redis m Int64
+setrange k i a = singleton $ SetRange $ cmd 4 ["SETRANGE", key k, int2bytes i, toByteString a]
 
-append :: Monad m => Key -> ByteString -> Redis m Int64
-append k v = singleton $ Append $ cmd 3 ["APPEND", key k, v]
+append :: (Monad m, ToByteString a) => Key -> a -> Redis m Int64
+append k v = singleton $ Append $ cmd 3 ["APPEND", key k, toByteString v]
 
 strlen :: Monad m => Key -> Redis m Int64
 strlen k = singleton $ StrLen $ cmd 2 ["STRLEN", key k]
@@ -757,16 +757,16 @@ hvals h = singleton $ HVals $ cmd 2 ["HVALS", key h]
 hmget :: (Monad m, FromByteString a) => Key -> NonEmpty Field -> Redis m [Maybe a]
 hmget h kk = singleton $ HMGet $ cmd (2 + NE.length kk) $ "HMGET" : key h : toList kk
 
-hmset :: Monad m => Key -> NonEmpty (Field, ByteString) -> Redis m ()
+hmset :: (Monad m, ToByteString a) => Key -> NonEmpty (Field, a) -> Redis m ()
 hmset h kv = singleton $ HMSet $ cmd (2 + 2 * NE.length kv) $ "HMSET" : key h : foldr f [] kv
   where
-    f (k, v) acc = k : v : acc
+    f (k, v) acc = k : toByteString v : acc
 
-hset :: Monad m => Key -> Field -> ByteString -> Redis m Bool
-hset h k v = singleton $ HSet $ cmd 4 ["HSET", key h, k, v]
+hset :: (Monad m, ToByteString a) => Key -> Field -> a -> Redis m Bool
+hset h k v = singleton $ HSet $ cmd 4 ["HSET", key h, k, toByteString v]
 
-hsetnx :: Monad m => Key -> Field -> ByteString -> Redis m Bool
-hsetnx h k v = singleton $ HSetNx $ cmd 4 ["HSETNX", key h, k, v]
+hsetnx :: (Monad m, ToByteString a) => Key -> Field -> a -> Redis m Bool
+hsetnx h k v = singleton $ HSetNx $ cmd 4 ["HSETNX", key h, k, toByteString v]
 
 hincrby :: Monad m => Key -> Field -> Int64 -> Redis m Int64
 hincrby h k v = singleton $ HIncrBy $ cmd 4 ["HINCRBY", key h, k, int2bytes v]
@@ -815,29 +815,29 @@ brpop kk (Seconds t) = singleton $ BRPop t $ cmd (2 + NE.length kk) $
 lrange :: (Monad m, FromByteString a) => Key -> Int64 -> Int64 -> Redis m [a]
 lrange k a b = singleton $ LRange $ cmd 4 ["LRANGE", key k, int2bytes a, int2bytes b]
 
-linsert :: Monad m => Key -> Side -> ByteString -> ByteString -> Redis m Int64
-linsert k s p v = singleton $ LInsert $ cmd 5 ["LINSERT", key k, side2bytes s, p, v]
+linsert :: (Monad m, ToByteString a) => Key -> Side -> a -> a -> Redis m Int64
+linsert k s p v = singleton $ LInsert $ cmd 5 ["LINSERT", key k, side2bytes s, toByteString p, toByteString v]
 
-lpush :: Monad m => Key -> NonEmpty ByteString -> Redis m Int64
-lpush k vv = singleton $ LPush $ cmd (2 + NE.length vv) $ "LPUSH" : key k : toList vv
+lpush :: (Monad m, ToByteString a) => Key -> NonEmpty a -> Redis m Int64
+lpush k vv = singleton $ LPush $ cmd (2 + NE.length vv) $ "LPUSH" : key k : map toByteString (toList vv)
 
-rpush :: Monad m => Key -> NonEmpty ByteString -> Redis m Int64
-rpush k vv = singleton $ RPush $ cmd (2 + NE.length vv) $ "RPUSH" : key k : toList vv
+rpush :: (Monad m, ToByteString a) => Key -> NonEmpty a -> Redis m Int64
+rpush k vv = singleton $ RPush $ cmd (2 + NE.length vv) $ "RPUSH" : key k : map toByteString (toList vv)
 
-lset :: Monad m => Key -> Int64 -> ByteString -> Redis m ()
-lset k i v = singleton $ LSet $ cmd 4 ["LSET", key k, int2bytes i, v]
+lset :: (Monad m, ToByteString a) => Key -> Int64 -> a -> Redis m ()
+lset k i v = singleton $ LSet $ cmd 4 ["LSET", key k, int2bytes i, toByteString v]
 
 ltrim :: Monad m => Key -> Int64 -> Int64 -> Redis m ()
 ltrim k i j = singleton $ LTrim $ cmd 4 ["LTRIM", key k, int2bytes i, int2bytes j]
 
-lrem :: Monad m => Key -> Int64 -> ByteString -> Redis m Int64
-lrem k c v = singleton $ LRem $ cmd 4 ["LREM", key k, int2bytes c, v]
+lrem :: (Monad m, ToByteString a) => Key -> Int64 -> a -> Redis m Int64
+lrem k c v = singleton $ LRem $ cmd 4 ["LREM", key k, int2bytes c, toByteString v]
 
-lpushx :: Monad m => Key -> ByteString -> Redis m Int64
-lpushx k v = singleton $ LPushX $ cmd 3 ["LPUSHX", key k, v]
+lpushx :: (Monad m, ToByteString a) => Key -> a -> Redis m Int64
+lpushx k v = singleton $ LPushX $ cmd 3 ["LPUSHX", key k, toByteString v]
 
-rpushx :: Monad m => Key -> ByteString -> Redis m Int64
-rpushx k v = singleton $ RPushX $ cmd 3 ["RPUSHX", key k, v]
+rpushx :: (Monad m, ToByteString a) => Key -> a -> Redis m Int64
+rpushx k v = singleton $ RPushX $ cmd 3 ["RPUSHX", key k, toByteString v]
 
 llen :: Monad m => Key -> Redis m Int64
 llen k = singleton $ LLen $ cmd 2 ["LLEN", key k]
@@ -848,11 +848,11 @@ llen k = singleton $ LLen $ cmd 2 ["LLEN", key k]
 spop :: (Monad m, FromByteString a) => Key -> Redis m (Maybe a)
 spop k = singleton $ SPop $ cmd 2 ["SPOP", key k]
 
-sismember :: Monad m => Key -> ByteString -> Redis m Bool
-sismember k v = singleton $ SIsMember $ cmd 3 ["SISMEMBER", key k, v]
+sismember :: (Monad m, ToByteString a) => Key -> a -> Redis m Bool
+sismember k v = singleton $ SIsMember $ cmd 3 ["SISMEMBER", key k, toByteString v]
 
-smove :: Monad m => Key -> Key -> ByteString -> Redis m Bool
-smove a b v = singleton $ SMove $ cmd 4 ["SMOVE", key a, key b, v]
+smove :: (Monad m, ToByteString a) => Key -> Key -> a -> Redis m Bool
+smove a b v = singleton $ SMove $ cmd 4 ["SMOVE", key a, key b, toByteString v]
 
 sdiff :: (Monad m, FromByteString a) => NonEmpty Key -> Redis m [a]
 sdiff kk = singleton $ SDiff $ cmd (1 + NE.length kk) $ "SDIFF" : map key (toList kk)
@@ -883,11 +883,11 @@ sunionstore :: Monad m => Key -> NonEmpty Key -> Redis m Int64
 sunionstore k kk = singleton $ SUnionStore $ cmd (2 + NE.length kk) $
     "SUNIONSTORE" : key k : map key (toList kk)
 
-sadd :: Monad m => Key -> NonEmpty ByteString -> Redis m Int64
-sadd k v = singleton $ SAdd $ cmd (2 + NE.length v) $ "SADD" : key k : toList v
+sadd :: (Monad m, ToByteString a) => Key -> NonEmpty a -> Redis m Int64
+sadd k v = singleton $ SAdd $ cmd (2 + NE.length v) $ "SADD" : key k : map toByteString (toList v)
 
-srem :: Monad m => Key -> NonEmpty ByteString -> Redis m Int64
-srem k vv = singleton $ SRem $ cmd (2 + NE.length vv) $ "SREM" : key k : toList vv
+srem :: (Monad m, ToByteString a) => Key -> NonEmpty a -> Redis m Int64
+srem k vv = singleton $ SRem $ cmd (2 + NE.length vv) $ "SREM" : key k : map toByteString (toList vv)
 
 sunion :: (Monad m, FromByteString a) => NonEmpty Key -> Redis m [a]
 sunion kk = singleton $ SUnion $ cmd (1 + NE.length kk) $ "SUNION" : map key (toList kk)
@@ -922,10 +922,10 @@ zrevrangebyscore k a b s o =
     if s then singleton $ ZRevRangeByScore s $ cmd (5 + len o) $ args ++ toList (opts o)
          else singleton $ ZRevRangeByScore s $ cmd (4 + len o) $ init args ++ toList (opts o)
 
-zadd :: Monad m => Key -> NonEmpty (Double, ByteString) -> Redis m Int64
+zadd :: (Monad m, ToByteString a) => Key -> NonEmpty (Double, a) -> Redis m Int64
 zadd k v = singleton $ ZAdd $ cmd (2 + 2 * NE.length v) $ "ZADD" : key k : foldr f [] v
   where
-    f (i, x) acc = dbl2bytes i : x : acc
+    f (i, x) acc = dbl2bytes i : toByteString x : acc
 
 zinterstore :: Monad m => Key -> NonEmpty Key -> [Int64] -> Aggregate -> Redis m Int64
 zinterstore = _interstore ZInterStore "ZINTERSTORE"
@@ -990,14 +990,14 @@ zremrangebyscore :: Monad m => Key -> Double -> Double -> Redis m Int64
 zremrangebyscore k a b = singleton $ ZRemRangeByScore $ cmd 4
     ["ZREMRANGEBYSCORE", key k, dbl2bytes a, dbl2bytes b]
 
-zrem :: Monad m => Key -> NonEmpty ByteString -> Redis m Int64
-zrem k vv = singleton $ ZRem $ cmd (2 + NE.length vv) $ "ZREM" : key k : toList vv
+zrem :: (Monad m, ToByteString a) => Key -> NonEmpty a -> Redis m Int64
+zrem k vv = singleton $ ZRem $ cmd (2 + NE.length vv) $ "ZREM" : key k : map toByteString (toList vv)
 
-zincrby :: Monad m => Key -> Double -> ByteString -> Redis m Double
-zincrby k i v = singleton $ ZIncrBy $ cmd 4 ["ZINCRBY", key k, dbl2bytes i, v]
+zincrby :: (Monad m, ToByteString a) => Key -> Double -> a -> Redis m Double
+zincrby k i v = singleton $ ZIncrBy $ cmd 4 ["ZINCRBY", key k, dbl2bytes i, toByteString v]
 
-zscore :: Monad m => Key -> ByteString -> Redis m (Maybe Double)
-zscore k v = singleton $ ZScore $ cmd 3 ["ZSCORE", key k, v]
+zscore :: (Monad m, ToByteString a) => Key -> a -> Redis m (Maybe Double)
+zscore k v = singleton $ ZScore $ cmd 3 ["ZSCORE", key k, toByteString v]
 
 zcard :: Monad m => Key -> Redis m Int64
 zcard k = singleton $ ZCard $ cmd 2 ["ZCARD", key k]
@@ -1005,17 +1005,17 @@ zcard k = singleton $ ZCard $ cmd 2 ["ZCARD", key k]
 zcount :: Monad m => Key -> Double -> Double -> Redis m Int64
 zcount k a b = singleton $ ZCount $ cmd 4 ["ZCOUNT", key k, dbl2bytes a, dbl2bytes b]
 
-zrank :: Monad m => Key -> ByteString -> Redis m (Maybe Int64)
-zrank k a = singleton $ ZRank $ cmd 3 ["ZRANK", key k, a]
+zrank :: (Monad m, ToByteString a) => Key -> a -> Redis m (Maybe Int64)
+zrank k a = singleton $ ZRank $ cmd 3 ["ZRANK", key k, toByteString a]
 
-zrevrank :: Monad m => Key -> ByteString -> Redis m (Maybe Int64)
-zrevrank k a = singleton $ ZRevRank $ cmd 3 ["ZREVRANK", key k, a]
+zrevrank :: (Monad m, ToByteString a) => Key -> a -> Redis m (Maybe Int64)
+zrevrank k a = singleton $ ZRevRank $ cmd 3 ["ZREVRANK", key k, toByteString a]
 
 -----------------------------------------------------------------------------
 -- HyperLogLog
 
-pfadd :: Monad m => Key -> NonEmpty ByteString -> Redis m Bool
-pfadd k v = singleton $ PfAdd $ cmd (2 + NE.length v) $ "PFADD" : key k : toList v
+pfadd :: (Monad m, ToByteString a) => Key -> NonEmpty a -> Redis m Bool
+pfadd k v = singleton $ PfAdd $ cmd (2 + NE.length v) $ "PFADD" : key k : map toByteString (toList v)
 
 pfcount :: Monad m => NonEmpty Key -> Redis m Int64
 pfcount kk = singleton $ PfCount $ cmd (1 + NE.length kk) $ "PFCOUNT" : map key (toList kk)
@@ -1076,8 +1076,8 @@ store k = Opts 2 $ "STORE" `cons` DL.singleton (key k)
 -----------------------------------------------------------------------------
 -- Pub/Sub
 
-publish :: Monad m => ByteString -> ByteString -> Redis m Int64
-publish c m = singleton $ Publish $ cmd 3 $ ["PUBLISH", c, m]
+publish :: (Monad m, ToByteString a) => ByteString -> a -> Redis m Int64
+publish c m = singleton $ Publish $ cmd 3 $ ["PUBLISH", c, toByteString m]
 
 subscribe :: Monad m => NonEmpty ByteString -> PubSub m ()
 subscribe cs = singleton $ Subscribe $ cmd (1 + NE.length cs) $ "SUBSCRIBE" : toList cs
