@@ -19,12 +19,13 @@ import Prelude hiding (take, takeWhile)
 import qualified Data.Attoparsec.ByteString.Lazy as P
 import qualified Data.ByteString.Lazy            as Lazy
 
+-- | 'Resp' defines the various RESP constructors.
 data Resp
-    = Str   !ByteString
-    | Err   !ByteString
-    | Int   !Int64
-    | Bulk  !ByteString
-    | Array !Int [Resp]
+    = Str   !ByteString -- ^ RESP simple atrings
+    | Err   !ByteString -- ^ RESP errors
+    | Int   !Int64      -- ^ RESP integers
+    | Bulk  !ByteString -- ^ RESP bulk strings
+    | Array !Int [Resp] -- ^ RESP arrays
     | NullArray
     | NullBulk
     deriving (Eq, Ord, Show)
@@ -53,6 +54,7 @@ encode d = toLazyByteString (go d)
 -----------------------------------------------------------------------------
 -- Parsing
 
+-- | An attoparsec parser to parse a single 'Resp' value.
 resp :: Parser Resp
 resp = do
     t <- anyChar

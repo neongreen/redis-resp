@@ -38,7 +38,6 @@ module Data.Redis.Command
     , zero
 
     -- ** Non-empty lists
-    , NonEmpty (..)
     , one
 
     -- ** Options
@@ -228,6 +227,10 @@ module Data.Redis.Command
     , fromSet
     , anyStr
     , readPushMessage
+
+    -- * Re-exports
+    , NonEmpty (..)
+    , NE.nonEmpty
     ) where
 
 import Control.Applicative
@@ -432,6 +435,7 @@ data PubSubCommand r where
     PSubscribe   :: Resp -> PubSubCommand ()
     PUnsubscribe :: Resp -> PubSubCommand ()
 
+-- | Messages which are published to subscribers.
 data PushMessage
     = SubscribeMessage
         { channel       :: !ByteString
@@ -461,22 +465,37 @@ data RedisType
     | RedisHash
     deriving (Eq, Ord, Show)
 
+-- | A type representing time-to-live values.
 data TTL = NoTTL | TTL !Int64
     deriving (Eq, Ord, Show)
 
+-- | Used in 'linsert' to specify the insertion point.
 data Side = Before | After
     deriving (Eq, Ord, Show)
 
-data Choose = One | Dist !Int64 | Arb !Int64
+data Choose
+    = One         -- ^ Exactly one element
+    | Dist !Int64 -- ^ @n@ distint elements
+    | Arb  !Int64 -- ^ @n@ arbitrary (i.e. potentially repeated) elements
     deriving (Eq, Ord, Show)
 
-data Aggregate = None | Min | Max | Sum
+data Aggregate
+    = None -- ^ no aggregation
+    | Min  -- ^ take the minimum score
+    | Max  -- ^ take the maximum score
+    | Sum  -- ^ addition of scores
     deriving (Eq, Ord, Show)
 
-data Min = MinIncl !ByteString | MinExcl !ByteString | MinInf
+data Min
+    = MinIncl !ByteString -- ^ lower bound (inclusive)
+    | MinExcl !ByteString -- ^ lower bound (exclusive)
+    | MinInf              -- ^ infinite lower bound
     deriving (Eq, Ord, Show)
 
-data Max = MaxIncl !ByteString | MaxExcl !ByteString | MaxInf
+data Max
+    = MaxIncl !ByteString -- ^ upper bound (inclusive)
+    | MaxExcl !ByteString -- ^ upper bound (exclusive)
+    | MaxInf              -- ^ infinite upper bound
     deriving (Eq, Ord, Show)
 
 data ScoreList a = ScoreList

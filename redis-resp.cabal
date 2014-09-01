@@ -1,6 +1,6 @@
 name:                redis-resp
 version:             0.2
-synopsis:            Implementation of REdis Serialization Protocol (RESP)
+synopsis:            REdis Serialization Protocol (RESP) implementation.
 license:             OtherLicense
 license-file:        LICENSE
 author:              Toralf Wittner
@@ -14,8 +14,12 @@ build-type:          Simple
 cabal-version:       >= 1.10
 
 description:
-    Pure implementation of REdis Serialization Protocol (RESP) as detailed
-    in <http://redis.io/topics/protocol Redis Protocol specification>
+    REdis Serialization Protocol (RESP) implementation as specified
+    in <http://redis.io/topics/protocol>.
+    .
+    Additionally most Redis commands are declared as an GADT which
+    enables different interpretations such as
+    <https://github.com/twittner/redis-io redis-io>.
 
 source-repository head
     type:             git
