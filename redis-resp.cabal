@@ -19,7 +19,7 @@ description:
     .
     Additionally most Redis commands are declared as an GADT which
     enables different interpretations such as
-    <https://github.com/twittner/redis-io redis-io>.
+    <http://hackage.haskell.org/package/redis-io redis-io>.
 
 source-repository head
     type:             git
