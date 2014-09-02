@@ -1,5 +1,5 @@
 name:                redis-resp
-version:             0.2
+version:             0.3
 synopsis:            REdis Serialization Protocol (RESP) implementation.
 license:             OtherLicense
 license-file:        LICENSE

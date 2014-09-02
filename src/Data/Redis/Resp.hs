@@ -5,7 +5,12 @@
 {-# LANGUAGE MultiWayIf        #-}
 {-# LANGUAGE OverloadedStrings #-}
 
-module Data.Redis.Resp where
+module Data.Redis.Resp
+    ( Resp (..)
+    , resp
+    , encode
+    , decode
+    ) where
 
 import Control.Applicative
 import Control.Monad (replicateM)
@@ -21,7 +26,7 @@ import qualified Data.ByteString.Lazy            as Lazy
 
 -- | 'Resp' defines the various RESP constructors.
 data Resp
-    = Str   !ByteString -- ^ RESP simple atrings
+    = Str   !ByteString -- ^ RESP simple strings
     | Err   !ByteString -- ^ RESP errors
     | Int   !Int64      -- ^ RESP integers
     | Bulk  !ByteString -- ^ RESP bulk strings

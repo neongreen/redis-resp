@@ -3,12 +3,9 @@
 -- file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
 module Data.Redis
-    ( module C
-    , Resp (..)
-    , resp
-    , decode
-    , encode
+    ( module Data.Redis.Resp
+    , module Data.Redis.Command
     ) where
 
 import Data.Redis.Resp
-import Data.Redis.Command as C
+import Data.Redis.Command
