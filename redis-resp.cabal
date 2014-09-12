@@ -1,5 +1,5 @@
 name:                redis-resp
-version:             0.3
+version:             0.3.1
 synopsis:            REdis Serialization Protocol (RESP) implementation.
 license:             OtherLicense
 license-file:        LICENSE
@@ -37,14 +37,14 @@ library
         Data.Redis.Command
 
     build-depends:
-        attoparsec            >= 0.11   && < 0.13
+        attoparsec            >= 0.11   && < 1.0
       , base                  >= 4.5    && < 5.0
-      , bytestring            >= 0.10.4 && < 0.11
+      , bytestring            >= 0.10.4 && < 1.0
       , bytestring-conversion == 0.2.*
-      , containers            >= 0.5    && < 0.6
-      , double-conversion     == 2.0.*
-      , dlist                 == 0.7.*
+      , containers            >= 0.5    && < 1.0
+      , double-conversion     >= 2.0    && < 3.0
+      , dlist                 >= 0.7    && < 1.0
       , operational           == 0.2.*
-      , semigroups            == 0.15.*
-      , split                 == 0.2.*
+      , semigroups            >= 0.15   && < 1.0
+      , split                 >= 0.2    && < 1.0
       , transformers          >= 0.3    && < 0.5
