@@ -28,6 +28,7 @@ module Data.Redis.Command
     , Max           (..)
     , ScoreList     (..)
     , Seconds       (..)
+    , Milliseconds  (..)
     , Timestamp     (..)
     , Field
     , Index
@@ -531,10 +532,11 @@ instance Monoid (Opts a) where
 none :: Monoid m => m
 none = mempty
 
-newtype Seconds   = Seconds Int64
-newtype Timestamp = Timestamp Int64
-newtype BitStart  = BitStart ByteString
-newtype BitEnd    = BitEnd   ByteString
+newtype Seconds      = Seconds Int64
+newtype Milliseconds = Milliseconds Int64
+newtype Timestamp    = Timestamp Int64
+newtype BitStart     = BitStart ByteString
+newtype BitEnd       = BitEnd   ByteString
 
 instance Monoid BitStart where
     mempty        = BitStart ""
@@ -664,11 +666,11 @@ get k = singleton $ Get $ cmd 2 ["GET", key k]
 set :: (Monad m, ToByteString a) => Key -> a -> Opts "SET" -> Redis m Bool
 set k v o = singleton $ Set $ cmd (3 + len o) $ "SET" : key k : toByteString v : toList (opts o)
 
-ex :: Int64 -> Opts "SET"
-ex i = Opts 2 $ "EX" `cons` DL.singleton (int2bytes i)
+ex :: Seconds -> Opts "SET"
+ex (Seconds i) = Opts 2 $ "EX" `cons` DL.singleton (int2bytes i)
 
-px :: Int64 -> Opts "SET"
-px i = Opts 2 $ "PX" `cons` DL.singleton (int2bytes i)
+px :: Milliseconds -> Opts "SET"
+px (Milliseconds i) = Opts 2 $ "PX" `cons` DL.singleton (int2bytes i)
 
 xx :: Opts "SET"
 xx = Opts 1 $ DL.singleton "XX"
