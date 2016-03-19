@@ -71,7 +71,6 @@ module Data.Redis.Command
     -- ** Transactions
     , discard
     , exec
-    , execRaw
     , multi
     , unwatch
     , watch
@@ -299,8 +298,7 @@ data Command :: * -> * where
     Watch   :: Resp -> Command ()
     Unwatch :: Resp -> Command ()
     Discard :: Resp -> Command ()
-    Exec    :: FromByteString a => Resp -> Command [a]
-    ExecRaw :: Resp -> Command Resp
+    Exec    :: Resp -> Command ()
 
     -- Keys
     Del       :: Resp -> Command Int64
@@ -612,11 +610,8 @@ unwatch = singleton $ Unwatch $ cmd 1 ["UNWATCH"]
 watch :: Monad m => NonEmpty Key -> Redis m ()
 watch kk = singleton $ Watch $ cmd (1 + NE.length kk) $ "WATCH" : map key (toList kk)
 
-exec :: (Monad m, FromByteString a) => Redis m [a]
+exec :: Monad m => Redis m ()
 exec = singleton $ Exec $ cmd 1 ["EXEC"]
-
-execRaw :: Monad m => Redis m Resp
-execRaw = singleton $ ExecRaw $ cmd 1 ["EXEC"]
 
 -----------------------------------------------------------------------------
 -- Keys
