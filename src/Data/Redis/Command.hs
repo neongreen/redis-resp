@@ -598,6 +598,44 @@ dbsize = singleton $ DbSize $ cmd 1 ["DBSIZE"]
 -----------------------------------------------------------------------------
 -- Transactions
 
+-- | Note: When initiating a 'multi' transaction it is important to note the
+-- behavior of the Redis server. Commands used will return \"QUEUED\" for all calls.
+-- When 'exec' is called the results from the commands will be returned (as long as the
+-- transaction is not cancelled). Therefore, you cannot use monadic computation within a
+-- 'multi' block as this will end in a 'RedisError' with the message "missing response".
+-- However, you can restrict your actions to applicative computation.
+--
+-- For example you cannot peform:
+--
+-- @
+--    -- Ends in RedisError \"missing response\"
+--    _ <- multi
+--    -- Check FOO BAR exists and if not set the value
+--    e <- hexists \"FOO\" \"BAR\"
+--    r <- bool (Right <$\> hset \"FOO\" \"BAR\" 1) (pure $ Left \"Key does not already exists\") e
+--    _ <- exec
+--    pure r
+-- @
+--
+-- By using 'watch' you can monitor the dependency outside of 'multi' and continue with
+-- the applicative computation. Note that if a transaction tries to access \"FOO\" this transaction will
+-- be aborted.
+--
+-- Here is the example using 'watch':
+--
+-- @
+--    -- | Puts FOO under watch
+--    _ <- watch (\"FOO\" :| [])
+--    e <- R.hexists \"FOO\" \"BAR\"
+--    -- | multi can safely check the value of 'e' and if another transactions accesses it.
+--    -- this transaction will abort.
+--    _ <- multi
+--    r <- bool (Right <$\> hset \"FOO\" \"BAR\" 1) (pure $ Left \"Key does not already exists\") e
+--    _ <- exec
+--    pure r
+-- @
+--
+-- For more information see: https://redis.io/topics/transactions
 multi :: Monad m => Redis m ()
 multi = singleton $ Multi $ cmd 1 ["MULTI"]
 
