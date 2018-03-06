@@ -598,44 +598,27 @@ dbsize = singleton $ DbSize $ cmd 1 ["DBSIZE"]
 -----------------------------------------------------------------------------
 -- Transactions
 
--- | Note: When initiating a 'multi' transaction it is important to note the
--- behavior of the Redis server. Commands used will return \"QUEUED\" for all calls.
--- When 'exec' is called the results from the commands will be returned (as long as the
--- transaction is not cancelled). Therefore, you cannot use monadic computation within a
--- 'multi' block as this will end in a 'RedisError' with the message "missing response".
--- However, you can restrict your actions to applicative computation.
---
--- For example you cannot peform:
+-- | Note that all commands following 'multi' and until 'exec' are queued by a Redis server. Therefore the result of any such command is not available until the exec command completes. For example, the following is an invalid Redis program:
 --
 -- @
---    -- Ends in RedisError \"missing response\"
---    _ <- multi
---    -- Check FOO BAR exists and if not set the value
---    e <- hexists \"FOO\" \"BAR\"
---    r <- bool (Right <$\> hset \"FOO\" \"BAR\" 1) (pure $ Left \"Key does not already exists\") e
---    _ <- exec
---    pure r
+--  multi
+--  x <- hexists "FOO" "BAR"
+--  unless x (void $ hset "FOO" "BAR" 1)
+--  exec
 -- @
 --
--- By using 'watch' you can monitor the dependency outside of 'multi' and continue with
--- the applicative computation. Note that if a transaction tries to access \"FOO\" this transaction will
--- be aborted.
---
--- Here is the example using 'watch':
+-- This pattern is usually indicative of the desire for a transactional check-and-set operation, which may be achieved instead by the following valid command sequence:
 --
 -- @
---    -- | Puts FOO under watch
---    _ <- watch (\"FOO\" :| [])
---    e <- R.hexists \"FOO\" \"BAR\"
---    -- | multi can safely check the value of 'e' and if another transactions accesses it.
---    -- this transaction will abort.
---    _ <- multi
---    r <- bool (Right <$\> hset \"FOO\" \"BAR\" 1) (pure $ Left \"Key does not already exists\") e
---    _ <- exec
---    pure r
+--  watch ("FOO" R.:| [])
+--  x <- hexists "FOO" "BAR"
+--  multi
+--  unless x (void $ hset "FOO" "BAR" 1)
+--  exec
 -- @
 --
--- For more information see: https://redis.io/topics/transactions
+--
+-- For more information on Redis transactions and conditional updates, see https://redis.io/topics/transactions.
 multi :: Monad m => Redis m ()
 multi = singleton $ Multi $ cmd 1 ["MULTI"]
 
