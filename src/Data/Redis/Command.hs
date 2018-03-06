@@ -598,6 +598,27 @@ dbsize = singleton $ DbSize $ cmd 1 ["DBSIZE"]
 -----------------------------------------------------------------------------
 -- Transactions
 
+-- | Note that all commands following 'multi' and until 'exec' are queued by a Redis server. Therefore the result of any such command is not available until the exec command completes. For example, the following is an invalid Redis program:
+--
+-- @
+--  multi
+--  x <- hexists "FOO" "BAR"
+--  unless x (void $ hset "FOO" "BAR" 1)
+--  exec
+-- @
+--
+-- This pattern is usually indicative of the desire for a transactional check-and-set operation, which may be achieved instead by the following valid command sequence:
+--
+-- @
+--  watch ("FOO" R.:| [])
+--  x <- hexists "FOO" "BAR"
+--  multi
+--  unless x (void $ hset "FOO" "BAR" 1)
+--  exec
+-- @
+--
+--
+-- For more information on Redis transactions and conditional updates, see https://redis.io/topics/transactions.
 multi :: Monad m => Redis m ()
 multi = singleton $ Multi $ cmd 1 ["MULTI"]
 
