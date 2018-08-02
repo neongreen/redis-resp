@@ -6,6 +6,8 @@
 *.prof
 dist/
 tags
+TAGS
 ID
 cabal.sandbox.config
 .cabal-sandbox/
+.stack-work/

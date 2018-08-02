@@ -523,9 +523,11 @@ instance IsString Key where
 -- | Command options
 data Opts (a :: Symbol) = Opts { len :: !Int, opts :: DList ByteString }
 
+instance Semigroup (Opts a) where
+    Opts x a <> Opts y b = Opts (x + y) (a `DL.append` b)
+
 instance Monoid (Opts a) where
     mempty = Opts 0 DL.empty
-    Opts x a `mappend` Opts y b = Opts (x + y) (a `DL.append` b)
 
 none :: Monoid m => m
 none = mempty
@@ -536,13 +538,17 @@ newtype Timestamp    = Timestamp Int64
 newtype BitStart     = BitStart ByteString
 newtype BitEnd       = BitEnd   ByteString
 
+instance Semigroup BitStart where
+    _ <> b = b
+
 instance Monoid BitStart where
-    mempty        = BitStart ""
-    _ `mappend` b = b
+    mempty = BitStart ""
+
+instance Semigroup BitEnd where
+    _ <> b = b
 
 instance Monoid BitEnd where
-    mempty        = BitEnd ""
-    _ `mappend` b = b
+    mempty = BitEnd ""
 
 start :: Int64 -> BitStart
 start = BitStart . int2bytes
